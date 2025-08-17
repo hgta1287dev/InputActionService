@@ -3,10 +3,6 @@ local InputAction = {}
 InputAction.__index = InputAction
 
 --[[ Config ]]
-local STATUS = {
-	PRESSED = "Pressed",
-	RELEASED = "Released",
-}
 local ERRORS = {
 	BINDING_EXISTS = "Binding '%s' already exists",
 	BINDING_MISSING = "Binding '%s' does not exist",
@@ -28,21 +24,27 @@ export type InputAction = {
 	Released: RBXScriptSignal,
 	Activated: RBXScriptSignal,
 	Deactivated: RBXScriptSignal,
+
 	BindingAdded: RBXScriptSignal,
 	BindingRemoved: RBXScriptSignal,
+	EnabledChanged: RBXScriptSignal,
+	Destroying: RBXScriptSignal,
 
-	_connections: { [string]: RBXScriptConnection },
 	_events: {
 		Pressed: BindableEvent,
 		Released: BindableEvent,
 		Activated: BindableEvent,
 		Deactivated: BindableEvent,
+
 		BindingAdded: BindableEvent,
 		BindingRemoved: BindableEvent,
+		EnabledChanged: BindableEvent,
+		Destroying: BindableEvent,
 	},
 } & typeof(InputAction)
 
 --[[ Public API ]]
+--// Basic constructor
 function InputAction.new(): InputAction
 	local self = setmetatable({} :: InputAction, InputAction)
 
@@ -52,14 +54,16 @@ function InputAction.new(): InputAction
 	self.bindings = {}
 	self.activeBindings = {}
 
-	self._connections = {}
 	self._events = {
 		Pressed = Instance.new("BindableEvent"),
 		Released = Instance.new("BindableEvent"),
 		Activated = Instance.new("BindableEvent"),
 		Deactivated = Instance.new("BindableEvent"),
+
 		BindingAdded = Instance.new("BindableEvent"),
 		BindingRemoved = Instance.new("BindableEvent"),
+		EnabledChanged = Instance.new("BindableEvent"),
+		Destroying = Instance.new("BindableEvent"),
 	}
 
 	for _, event: BindableEvent in pairs(self._events) do
@@ -75,7 +79,7 @@ function InputAction:Enable()
 	end
 
 	self.isEnabled = true
-	self:_setup()
+	self._events.EnabledChanged:Fire(self.isEnabled)
 end
 
 function InputAction:Disable()
@@ -84,11 +88,29 @@ function InputAction:Disable()
 	end
 
 	self.isEnabled = false
-	self:_cleanup()
+	self._events.EnabledChanged:Fire(self.isEnabled)
 end
 
-function InputAction:Destroy()
+function InputAction:Toggle(active: boolean?)
+	local shouldEnabled = active ~= nil and active or not self.isEnabled
+	if shouldEnabled then
+		self:Enable()
+	else
+		self:Disable()
+	end
+end
+
+function InputAction:Destroy(destroyBindings: boolean?)
+	self._events.Destroying:Fire()
+
+	self:ReleaseAll()
 	self:Disable()
+
+	if destroyBindings ~= false then
+		for _, binding in pairs(self.bindings) do
+			binding:Destroy()
+		end
+	end
 
 	for _, event: BindableEvent in pairs(self._events) do
 		event:Destroy()
@@ -98,97 +120,145 @@ function InputAction:Destroy()
 	setmetatable(self, nil)
 end
 
+--// Binding management
 function InputAction:AddBinding(name: string, binding: InputBinding)
 	if self.bindings[name] then
 		warn(string.format(ERRORS.BINDING_EXISTS, name))
 		return
 	end
 
-	self:_setBindingConnections(name, binding, true)
-
 	self.bindings[name] = binding
 	self._events.BindingAdded:Fire(name, binding)
 end
 
-function InputAction:RemoveBinding(name: string)
+function InputAction:RemoveBinding(name: string, destroy: boolean?)
 	local binding = self.bindings[name]
 	if not binding then
 		warn(string.format(ERRORS.BINDING_MISSING, name))
 		return
 	end
 
-	self:_setBindingConnections(name, binding, false)
+	if self.activeBindings[name] then
+		self:Release(name)
+	end
+
+	if destroy ~= false then
+		binding:Destroy()
+	end
 
 	self.bindings[name] = nil
 	self._events.BindingRemoved:Fire(name, binding)
 end
 
---[[ Private Methods ]]
-function InputAction:_updateActive()
-	local isActive = next(self.activeBindings) ~= nil
+--// Action Activation
+function InputAction:IsMatchingInput(input: InputObject): boolean
+	for _, binding in pairs(self.bindings) do
+		if binding:IsMatchingInput(input) then
+			return true
+		end
+	end
+	return false
+end
 
-	if isActive == self.isActivated then
+function InputAction:PressInput(input: InputObject)
+	if not self.isEnabled then
 		return
 	end
 
-	self.isActivated = isActive
+	for name, binding in pairs(self.bindings) do
+		if binding:IsMatchingInput(input) then
+			self:Press(name)
+		end
+	end
+end
 
-	if isActive then
+function InputAction:IsMatchingButton(button: GuiButton): boolean
+	for _, binding: InputBinding in pairs(self.bindings) do
+		if binding.type == "Button" and binding:IsMatchingButton(button) then
+			return true
+		end
+	end
+	return false
+end
+
+function InputAction:PressButton(button: GuiButton)
+	if not self.isEnabled then
+		return
+	end
+
+	for name, binding in pairs(self.bindings) do
+		if binding:IsMatchingButton(button) then
+			self:Press(name)
+		end
+	end
+end
+
+function InputAction:Press(name: string)
+	if not self.isEnabled then
+		return
+	end
+
+	local binding = self.bindings[name]
+	if not binding then
+		warn(string.format(ERRORS.BINDING_MISSING, name))
+		return
+	end
+
+	if self.activeBindings[name] then
+		return
+	end
+
+	self.activeBindings[name] = true
+	self._events.Pressed:Fire(name, binding)
+	self:_updateActivation()
+end
+
+function InputAction:Release(name: string)
+	if not self.isEnabled then
+		return
+	end
+
+	local binding = self.bindings[name]
+	if not binding then
+		warn(string.format(ERRORS.BINDING_MISSING, name))
+		return
+	end
+
+	if not self.activeBindings[name] then
+		return
+	end
+
+	self.activeBindings[name] = nil
+	self._events.Released:Fire(name, binding)
+	self:_updateActivation()
+end
+
+function InputAction:ReleaseAll()
+	local activeBindings = table.clone(self.activeBindings)
+	if not next(activeBindings) then
+		return
+	end
+
+	for name in pairs(activeBindings) do
+		self:Release(name)
+	end
+end
+
+--[[ Private Methods ]]
+function InputAction:_updateActivation()
+	local isActivated = self.isEnabled and next(self.activeBindings) ~= nil
+
+	if isActivated == self.isActivated then
+		return
+	end
+
+	if isActivated and not self.isActivated then
+		self.isActivated = true
 		self._events.Activated:Fire()
-	else
+	elseif not isActivated and self.isActivated then
+		self.isActivated = false
 		self._events.Deactivated:Fire()
 	end
-end
-
-function InputAction:_setBindingConnections(name: string, binding: InputBinding, active: boolean)
-	if self._connections[name .. STATUS.PRESSED] then
-		self._connections[name .. STATUS.PRESSED]:Disconnect()
-		self._connections[name .. STATUS.PRESSED] = nil
-	end
-
-	if self._connections[name .. STATUS.RELEASED] then
-		self._connections[name .. STATUS.RELEASED]:Disconnect()
-		self._connections[name .. STATUS.RELEASED] = nil
-	end
-
-	if active then
-		self._connections[name .. STATUS.PRESSED] = binding.Pressed:Connect(function()
-			self._events.Pressed:Fire(binding.key)
-			self.activeBindings[name] = true
-			self:_updateActive()
-		end)
-
-		self._connections[name .. STATUS.RELEASED] = binding.Released:Connect(function()
-			self._events.Released:Fire(binding.key)
-			self.activeBindings[name] = nil
-			self:_updateActive()
-		end)
-	else
-		if not self.activeBindings[name] then
-			return
-		end
-		self._events.Released:Fire(binding.key)
-		self.activeBindings[name] = nil
-		self:_updateActive()
-	end
-end
-
-function InputAction:_setup()
-	for name: string, binding: InputBinding in pairs(self.bindings) do
-		self:_setBindingConnections(name, binding, true)
-	end
-end
-
-function InputAction:_cleanup()
-	for name: string, binding: InputBinding in pairs(self.bindings) do
-		self:_setBindingConnections(name, binding, false)
-	end
-
-	for _, connection: RBXScriptConnection in pairs(self._connections) do
-		connection:Disconnect()
-	end
-
-	self._connections = {}
 end
 
 return InputAction
