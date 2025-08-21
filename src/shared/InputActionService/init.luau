@@ -1,3 +1,10 @@
+--[[
+	InputActionService
+	Version: 1.2.0
+	Last Updated: 2025-08-21
+	Author: hí
+--]]
+
 --!strict
 local InputActionService = {}
 InputActionService.__index = InputActionService
