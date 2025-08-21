@@ -73,16 +73,13 @@ function InputContext:Enable()
 	self._events.EnabledChanged:Fire(self.isEnabled)
 end
 
-function InputContext:Disable(disableActions: boolean?)
+function InputContext:Disable()
 	if not self.isEnabled then
 		return
 	end
 
-	if disableActions ~= false then
-		self:DisableAllActions()
-	end
-
 	self.isEnabled = false
+	self:ReleaseAll()
 	self._events.EnabledChanged:Fire(self.isEnabled)
 end
 

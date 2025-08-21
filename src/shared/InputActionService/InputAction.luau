@@ -96,8 +96,8 @@ function InputAction:Disable()
 		return
 	end
 
-	self.isEnabled = false
 	self:ReleaseAll()
+	self.isEnabled = false
 
 	self._events.EnabledChanged:Fire(self.isEnabled)
 end

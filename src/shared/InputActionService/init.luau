@@ -268,6 +268,9 @@ function InputActionService:_setupButtonConnection(button: GuiButton)
 	self._connections[button.Name .. BUTTON_EVENTSTATE.DOWN] = button.MouseButton1Down:Connect(function()
 		for _, contextName in pairs(self.stackContexts) do
 			local context = self.contexts[contextName]
+			if not context.isEnabled then
+				continue
+			end
 			local activated = false
 			for _, action in pairs(context.actions) do
 				if not activated and action:IsMatchingButton(button) then
@@ -281,6 +284,9 @@ function InputActionService:_setupButtonConnection(button: GuiButton)
 	self._connections[button.Name .. BUTTON_EVENTSTATE.UP] = button.MouseButton1Up:Connect(function()
 		for _, contextName in pairs(self.stackContexts) do
 			local context = self.contexts[contextName]
+			if not context.isEnabled then
+				continue
+			end
 			for _, action in pairs(context.actions) do
 				action:ReleaseButton(button)
 			end
@@ -290,6 +296,9 @@ function InputActionService:_setupButtonConnection(button: GuiButton)
 	self._connections[button.Name .. BUTTON_EVENTSTATE.LEAVE] = button.MouseLeave:Connect(function()
 		for _, contextName in pairs(self.stackContexts) do
 			local context = self.contexts[contextName]
+			if not context.isEnabled then
+				continue
+			end
 			for _, action in pairs(context.actions) do
 				action:ReleaseButton(button)
 			end
@@ -309,6 +318,10 @@ function InputActionService:_setupUISConnections()
 
 		for _, contextName in ipairs(self.stackContexts) do
 			local context = self.contexts[contextName]
+			if not context.isEnabled then
+				continue
+			end
+
 			local activated = false
 			for _, action in pairs(context.actions) do
 				if not activated and action:IsMatchingInput(input) then
@@ -329,6 +342,10 @@ function InputActionService:_setupUISConnections()
 
 		for _, contextName in ipairs(self.stackContexts) do
 			local context = self.contexts[contextName]
+			if not context.isEnabled then
+				continue
+			end
+
 			for _, action in pairs(context.actions) do
 				action:ReleaseInput(input)
 			end
