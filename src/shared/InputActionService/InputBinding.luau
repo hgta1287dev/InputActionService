@@ -25,7 +25,7 @@ export type InputBinding = {
 		Destroying: BindableEvent,
 		EnabledChanged: BindableEvent,
 	},
-} & typeof(InputBinding)
+} & typeof(setmetatable({} :: InputBinding, InputBinding))
 
 --[[ Helpers ]]
 local function isValidKey(bindingType: InputBindingType, bindingKey: InputBindingKey): boolean
@@ -69,9 +69,12 @@ function InputBinding.new(bindingType: InputBindingType, bindingKey: InputBindin
 		EnabledChanged = Instance.new("BindableEvent"),
 	}
 
-	for _, event in pairs(self._events) do
-		(self :: any)[event.Name] = event.Event
+	for name, event: BindableEvent in pairs(self._events) do
+		(self :: any)[name] = event.Event
 	end
+
+	--// Init
+	self:Enable()
 
 	return self
 end
@@ -129,6 +132,9 @@ function InputBinding:ChangeKey(newType: InputBindingType, newKey: InputBindingK
 end
 
 function InputBinding:IsMatchingButton(button: GuiButton): boolean
+	if self.isEnabled == false then
+		return false
+	end
 	if self.type ~= "Button" then
 		return false
 	end
@@ -137,6 +143,9 @@ function InputBinding:IsMatchingButton(button: GuiButton): boolean
 end
 
 function InputBinding:IsMatchingInput(input: InputObject): boolean
+	if self.isEnabled == false then
+		return false
+	end
 	return (self.type == "Keyboard" and input.KeyCode == self.key)
 		or (self.type == "Gamepad" and input.KeyCode == self.key)
 		or (self.type == "Mouse" and input.UserInputType == self.key)

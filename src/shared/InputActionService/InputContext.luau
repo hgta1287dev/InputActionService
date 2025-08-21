@@ -4,8 +4,8 @@ InputContext.__index = InputContext
 
 --[[ Config ]]
 local ERRORS = {
-	ACTION_EXISTS = "Action '%s' already exists in context '%s'",
-	ACTION_MISSING = "Action '%s' does not exist in context '%s'",
+	ACTION_EXISTS = "Action '%s' already exists in context",
+	ACTION_MISSING = "Action '%s' does not exist in context",
 }
 
 --[[ Modules ]]
@@ -16,7 +16,6 @@ export type InputAction = InputAction.InputAction
 export type InputContext = {
 	priority: number,
 	actions: { [string]: InputAction },
-	ativeActions: { [string]: boolean },
 
 	isEnabled: boolean,
 
@@ -34,15 +33,17 @@ export type InputContext = {
 		EnabledChanged: BindableEvent,
 		PriorityChanged: BindableEvent,
 	},
-} & typeof(InputContext)
+} & typeof(setmetatable({} :: InputContext, InputContext))
 
 --[[ Public API ]]
 --// Basic constructor
-function InputContext.new(priority: number?): InputContext
+function InputContext.new(priority: number?, actions: { string: InputAction }?): InputContext
 	local self = setmetatable({} :: InputContext, InputContext)
 
 	self.priority = priority or 1
 	self.isEnabled = false
+
+	self.actions = actions or {}
 
 	self._connections = {}
 	self._events = {
@@ -53,9 +54,12 @@ function InputContext.new(priority: number?): InputContext
 		PriorityChanged = Instance.new("BindableEvent"),
 	}
 
-	for _, event: BindableEvent in pairs(self._events) do
-		(self :: any)[event.Name] = event.Event
+	for name, event: BindableEvent in pairs(self._events) do
+		(self :: any)[name] = event.Event
 	end
+
+	--// Init
+	self:Enable()
 
 	return self
 end
@@ -109,6 +113,19 @@ function InputContext:Destroy(destroyActions: boolean?)
 	setmetatable(self, nil)
 end
 
+--// Action management
+function InputContext:DisableAllActions()
+	for _, action in pairs(self.actions) do
+		action:Disable()
+	end
+end
+
+function InputContext:ReleaseAll()
+	for _, action in pairs(self.actions) do
+		action:ReleaseAll()
+	end
+end
+
 --// Priority management
 function InputContext:SetPriority(priority: number)
 	if self.priority == priority then
@@ -120,25 +137,42 @@ function InputContext:SetPriority(priority: number)
 end
 
 --// Action management
-function InputContext:AddAction(name: string, action: InputAction)
+function InputContext:AddAction(name: string, action: InputAction?): InputAction
 	if self.actions[name] then
-		error(string.format(ERRORS.ACTION_EXISTS, name))
+		warn(string.format(ERRORS.ACTION_EXISTS, name))
+		return self.actions[name]
 	end
 
-	self.actions[name] = action
-	self._events.ActionAdded:Fire(name, action)
+	local act = action or InputAction.new()
 
-	return action
+	self.actions[name] = act
+	self._events.ActionAdded:Fire(name, act)
+
+	return act
 end
 
-function InputContext:RemoveAction(name: string)
+function InputContext:RemoveAction(name: string): InputAction?
 	local action = self.actions[name]
 	if not action then
-		error(string.format(ERRORS.ACTION_MISSING, name))
+		warn(string.format(ERRORS.ACTION_MISSING, name))
+		return
 	end
 
 	self.actions[name] = nil
 	self._events.ActionRemoved:Fire(name, action)
+
+	return action
+end
+
+function InputContext:GetAction(name: string): InputAction?
+	return self.actions[name]
+end
+
+function InputContext:RequireAction(name: string): InputAction
+	local action = self.actions[name]
+	if not action then
+		error(string.format(ERRORS.ACTION_MISSING, name), 2)
+	end
 
 	return action
 end

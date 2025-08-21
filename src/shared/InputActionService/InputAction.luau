@@ -13,6 +13,12 @@ local InputBinding = require(script.Parent.InputBinding)
 
 --[[ Types ]]
 export type InputBinding = InputBinding.InputBinding
+export type InputBindingKey = InputBinding.InputBindingKey
+export type InputBindingType = InputBinding.InputBindingType
+export type BindingFromTypeConfig = {
+	bindingType: InputBindingType,
+	bindingKey: InputBindingKey,
+}
 export type InputAction = {
 	isEnabled: boolean,
 	isActivated: boolean,
@@ -41,17 +47,17 @@ export type InputAction = {
 		EnabledChanged: BindableEvent,
 		Destroying: BindableEvent,
 	},
-} & typeof(InputAction)
+} & typeof(setmetatable({} :: InputAction, InputAction))
 
 --[[ Public API ]]
 --// Basic constructor
-function InputAction.new(): InputAction
+function InputAction.new(bindings: { string: InputBinding }?): InputAction
 	local self = setmetatable({} :: InputAction, InputAction)
 
 	self.isEnabled = false
 	self.isActivated = false
 
-	self.bindings = {}
+	self.bindings = bindings or {}
 	self.activeBindings = {}
 
 	self._events = {
@@ -66,9 +72,12 @@ function InputAction.new(): InputAction
 		Destroying = Instance.new("BindableEvent"),
 	}
 
-	for _, event: BindableEvent in pairs(self._events) do
-		(self :: any)[event.Name] = event.Event
+	for name, event: BindableEvent in pairs(self._events) do
+		(self :: any)[name] = event.Event
 	end
+
+	--// Init
+	self:Enable()
 
 	return self
 end
@@ -88,6 +97,8 @@ function InputAction:Disable()
 	end
 
 	self.isEnabled = false
+	self:ReleaseAll()
+
 	self._events.EnabledChanged:Fire(self.isEnabled)
 end
 
@@ -103,7 +114,6 @@ end
 function InputAction:Destroy(destroyBindings: boolean?)
 	self._events.Destroying:Fire()
 
-	self:ReleaseAll()
 	self:Disable()
 
 	if destroyBindings ~= false then
@@ -121,14 +131,37 @@ function InputAction:Destroy(destroyBindings: boolean?)
 end
 
 --// Binding management
-function InputAction:AddBinding(name: string, binding: InputBinding)
+function InputAction:AddBinding(name: string, bindingType: InputBindingType, bindingKey: InputBindingKey): InputBinding
 	if self.bindings[name] then
 		warn(string.format(ERRORS.BINDING_EXISTS, name))
-		return
+		return self.bindings[name]
 	end
+
+	local binding = InputBinding.new(bindingType, bindingKey)
 
 	self.bindings[name] = binding
 	self._events.BindingAdded:Fire(name, binding)
+
+	return binding
+end
+
+function InputAction:AddBindings(bindings: { [string]: { bindingType: InputBindingType, bindingKey: InputBindingKey } })
+	for name, binding in pairs(bindings) do
+		self:AddBinding(name, binding.bindingType, binding.bindingKey)
+	end
+end
+
+function InputAction:GetBinding(name: string): InputBinding?
+	return self.bindings[name]
+end
+
+function InputAction:RequireBinding(name: string): InputBinding
+	local binding = self.bindings[name]
+	if not binding then
+		error(string.format(ERRORS.BINDING_MISSING, name), 2)
+	end
+
+	return binding
 end
 
 function InputAction:RemoveBinding(name: string, destroy: boolean?)
@@ -172,6 +205,18 @@ function InputAction:PressInput(input: InputObject)
 	end
 end
 
+function InputAction:ReleaseInput(input: InputObject)
+	if not self.isEnabled then
+		return
+	end
+
+	for name, binding in pairs(self.bindings) do
+		if binding:IsMatchingInput(input) then
+			self:Release(name)
+		end
+	end
+end
+
 function InputAction:IsMatchingButton(button: GuiButton): boolean
 	for _, binding: InputBinding in pairs(self.bindings) do
 		if binding.type == "Button" and binding:IsMatchingButton(button) then
@@ -189,6 +234,18 @@ function InputAction:PressButton(button: GuiButton)
 	for name, binding in pairs(self.bindings) do
 		if binding:IsMatchingButton(button) then
 			self:Press(name)
+		end
+	end
+end
+
+function InputAction:ReleaseButton(button: GuiButton)
+	if not self.isEnabled then
+		return
+	end
+
+	for name, binding in pairs(self.bindings) do
+		if binding:IsMatchingButton(button) then
+			self:Release(name)
 		end
 	end
 end

@@ -7,18 +7,17 @@ local BUTTON_EVENTSTATE = {
 	DOWN = "Down",
 	UP = "Up",
 }
--- local ERRORS = {
--- 	ACTION_EXISTS = "Action '%s' already exists",
--- 	ACTION_MISSING = "Action '%s' does not exist",
--- 	CONTEXT_EXISTS = "Context '%s' already exists",
--- 	CONTEXT_MISSING = "Context '%s' does not exist",
--- }
+local ERRORS = {
+	ACTION_EXISTS = "Action '%s' already exists",
+	ACTION_MISSING = "Action '%s' does not exist",
+	CONTEXT_EXISTS = "Context '%s' already exists",
+	CONTEXT_MISSING = "Context '%s' does not exist",
+}
 
 --[[ Services ]]
 local UIS = game:GetService("UserInputService")
 
 --[[ Modules ]]
---
 local InputAction = require(script.InputAction)
 local InputContext = require(script.InputContext)
 local InputBinding = require(script.InputBinding)
@@ -55,7 +54,7 @@ export type InputActionService = {
 		ContextAdded: BindableEvent,
 		ContextRemoved: BindableEvent,
 	},
-} & typeof(InputActionService)
+} & typeof(setmetatable({} :: InputActionService, InputActionService))
 
 --[[ Public API ]]
 --//Basic constructor
@@ -78,8 +77,8 @@ function InputActionService.new(): InputActionService
 		ContextRemoved = Instance.new("BindableEvent"),
 	}
 
-	for _, event: BindableEvent in pairs(self._events) do
-		(self :: any)[event.Name] = event.Event
+	for name, event: BindableEvent in pairs(self._events) do
+		(self :: any)[name] = event.Event
 	end
 
 	--// Init
@@ -123,6 +122,104 @@ function InputActionService:Destroy()
 
 	table.clear(self)
 	setmetatable(self, nil)
+end
+
+--[[ Context Management ]]
+function InputActionService:AddContext(name: string): InputContext
+	if self.contexts[name] then
+		warn(string.format(ERRORS.CONTEXT_EXISTS, name))
+		return self.contexts[name]
+	end
+
+	local context = InputContext.new()
+	self.contexts[name] = context
+
+	table.insert(self.stackContexts, name)
+	self:_updateStackContexts()
+
+	self._events.ContextAdded:Fire(context)
+
+	return context
+end
+
+function InputActionService:AddContexts(contexts: { string }): { [string]: InputContext }
+	local result: { [string]: InputContext } = {}
+	for name, context in pairs(contexts) do
+		result[name] = self:AddContext(name, context)
+	end
+	return result
+end
+
+function InputActionService:RemoveContext(name: string)
+	if not self.contexts[name] then
+		warn(string.format(ERRORS.CONTEXT_MISSING, name))
+	end
+
+	self.contexts[name] = nil
+
+	local index = table.find(self.stackContexts, name)
+	if index then
+		table.remove(self.stackContexts, index)
+	end
+	self:_updateStackContexts()
+
+	self._events.ContextRemoved:Fire(name)
+end
+
+function InputActionService:RemoveContexts(names: { string })
+	for _, name in pairs(names) do
+		self:RemoveContext(name)
+	end
+end
+
+function InputActionService:GetContext(name: string): InputContext?
+	return self.contexts[name]
+end
+
+function InputActionService:RequireContext(name: string): InputContext
+	local context = self.contexts[name]
+	if not context then
+		error(string.format(ERRORS.CONTEXT_MISSING, name), 2)
+	end
+
+	return context
+end
+
+--//Stack Management
+function InputActionService:PushContext(name: string)
+	if not self.contexts[name] then
+		warn(string.format(ERRORS.CONTEXT_MISSING, name))
+	end
+
+	if table.find(self.stackContexts, name) then
+		return
+	end
+
+	table.insert(self.stackContexts, name)
+	self:_updateStackContexts()
+end
+
+function InputActionService:PopContext(name: string)
+	if not self.contexts[name] then
+		warn(string.format(ERRORS.CONTEXT_MISSING, name))
+	end
+
+	local index = table.find(self.stackContexts, name)
+	if not index then
+		return
+	end
+
+	table.remove(self.stackContexts, index)
+	self:_updateStackContexts()
+end
+
+function InputActionService:ClearStack()
+	self.stackContexts = {}
+	self:_updateStackContexts()
+end
+
+function InputActionService:GetStack(): { string }
+	return self.stackContexts
 end
 
 --[[ Private Methods ]]
@@ -210,7 +307,7 @@ function InputActionService:_setupUISConnections()
 			return
 		end
 
-		for _, contextName in pairs(self.stackContexts) do
+		for _, contextName in ipairs(self.stackContexts) do
 			local context = self.contexts[contextName]
 			local activated = false
 			for _, action in pairs(context.actions) do
@@ -230,7 +327,7 @@ function InputActionService:_setupUISConnections()
 			return
 		end
 
-		for _, contextName in pairs(self.stackContexts) do
+		for _, contextName in ipairs(self.stackContexts) do
 			local context = self.contexts[contextName]
 			for _, action in pairs(context.actions) do
 				action:ReleaseInput(input)
