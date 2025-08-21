@@ -10,9 +10,17 @@ local ERRORS = {
 
 --[[ Modules ]]
 local InputAction = require(script.Parent.InputAction)
+local InputBinding = require(script.Parent.InputBinding)
 
 --[[ Types ]]
 export type InputAction = InputAction.InputAction
+export type InputBinding = InputBinding.InputBinding
+export type InputBindingType = InputBinding.InputBindingType
+export type InputBindingKey = InputBinding.InputBindingKey
+export type InputBindingConfig = {
+	bindingType: InputBindingType,
+	bindingKey: InputBindingKey,
+}
 export type InputContext = {
 	priority: number,
 	actions: { [string]: InputAction },
@@ -134,18 +142,29 @@ function InputContext:SetPriority(priority: number)
 end
 
 --// Action management
-function InputContext:AddAction(name: string, action: InputAction?): InputAction
+function InputContext:AddAction(name: string, bindingConfigs: { [string]: InputBindingConfig }): InputAction
 	if self.actions[name] then
 		warn(string.format(ERRORS.ACTION_EXISTS, name))
 		return self.actions[name]
 	end
 
-	local act = action or InputAction.new()
+	local action = InputAction.new()
+	action:AddBindings(bindingConfigs)
 
-	self.actions[name] = act
-	self._events.ActionAdded:Fire(name, act)
+	self.actions[name] = action
+	self._events.ActionAdded:Fire(name, action)
 
-	return act
+	return action
+end
+
+function InputContext:AddActions(actionConfigs: { [string]: {
+	[string]: InputBindingConfig,
+} }): { [string]: InputAction }
+	local results: { [string]: InputAction } = {}
+	for name, actionConfig in pairs(actionConfigs) do
+		results[name] = self:AddAction(name, actionConfig)
+	end
+	return results
 end
 
 function InputContext:RemoveAction(name: string): InputAction?
