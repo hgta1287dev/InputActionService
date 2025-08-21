@@ -1,3 +1,4 @@
+--!strict
 local InputActionService = {}
 InputActionService.__index = InputActionService
 
