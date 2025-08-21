@@ -1,10 +1,3 @@
---[[
-	InputActionService
-	Version: 1.2.0
-	Last Updated: 2025-08-21
-	Author: hí
---]]
-
 --!strict
 local InputActionService = {}
 InputActionService.__index = InputActionService
@@ -38,7 +31,7 @@ export type InputBinding = InputBinding.InputBinding
 export type InputActionService = {
 	contexts: { [string]: InputContext },
 	stackContexts: { string },
-	buttonBindings: { [string]: InputBinding },
+	buttons: { [string]: GuiButton },
 
 	isEnabled: boolean,
 
@@ -71,7 +64,7 @@ function InputActionService.new(): InputActionService
 
 	self.contexts = {}
 	self.stackContexts = {}
-	self.buttonBindings = {}
+	self.buttons = {}
 
 	self.isEnabled = false
 
@@ -150,10 +143,10 @@ function InputActionService:AddContext(name: string): InputContext
 	return context
 end
 
-function InputActionService:AddContexts(contexts: { string }): { [string]: InputContext }
+function InputActionService:AddContexts(contextNames: { string }): { [string]: InputContext }
 	local result: { [string]: InputContext } = {}
-	for name, context in pairs(contexts) do
-		result[name] = self:AddContext(name, context)
+	for _, name in pairs(contextNames) do
+		result[name] = self:AddContext(name)
 	end
 	return result
 end
@@ -232,21 +225,30 @@ end
 
 --[[ Private Methods ]]
 function InputActionService:_updateStackContexts()
+	if #self.stackContexts == 0 then
+		return
+	end
+
 	table.sort(self.stackContexts, function(a, b)
-		return self.contexts[a].priority < self.contexts[b].priority
+		local contextA = self.contexts[a] :: InputContext
+		local contextB = self.contexts[b] :: InputContext
+
+		if not contextA or not contextB then
+			return false
+		end
+
+		return (contextA.priority :: number) < (contextB.priority :: number)
 	end)
 end
 
 function InputActionService:_cleanupUISConnections()
-	if not self._connections.InputBegan then
-		return
+	if self._connections.InputBegan then
+		self._connections.InputBegan:Disconnect()
 	end
 
-	self._connections.InputBegan:Disconnect()
-	self._connections.InputBegan = nil
-
-	self._connections.InputEnded:Disconnect()
-	self._connections.InputEnded = nil
+	if self._connections.InputEnded then
+		self._connections.InputEnded:Disconnect()
+	end
 end
 
 function InputActionService:_cleanup()
@@ -263,8 +265,8 @@ end
 function InputActionService:_setup()
 	self:_setupUISConnections()
 
-	for _, button in pairs(self.buttonBindings) do
-		self:_setupButtonConnection(button)
+	for _, button in pairs(self.buttons) do
+		self:_setupButtonConnection(button :: GuiButton)
 	end
 end
 
@@ -279,11 +281,7 @@ function InputActionService:_setupButtonConnection(button: GuiButton)
 			if not context.isEnabled then
 				continue
 			end
-			local activated = false
-			for _, action in pairs(context.actions) do
-				if not activated and action:IsMatchingButton(button) then
-					activated = true
-				end
+			for _, action: any in pairs(context.actions) do
 				action:PressButton(button)
 			end
 		end
@@ -295,7 +293,7 @@ function InputActionService:_setupButtonConnection(button: GuiButton)
 			if not context.isEnabled then
 				continue
 			end
-			for _, action in pairs(context.actions) do
+			for _, action: any in pairs(context.actions) do
 				action:ReleaseButton(button)
 			end
 		end
@@ -307,7 +305,7 @@ function InputActionService:_setupButtonConnection(button: GuiButton)
 			if not context.isEnabled then
 				continue
 			end
-			for _, action in pairs(context.actions) do
+			for _, action: any in pairs(context.actions) do
 				action:ReleaseButton(button)
 			end
 		end
@@ -331,7 +329,7 @@ function InputActionService:_setupUISConnections()
 			end
 
 			local activated = false
-			for _, action in pairs(context.actions) do
+			for _, action: any in pairs(context.actions) do
 				if not activated and action:IsMatchingInput(input) then
 					activated = true
 				end
@@ -354,7 +352,7 @@ function InputActionService:_setupUISConnections()
 				continue
 			end
 
-			for _, action in pairs(context.actions) do
+			for _, action: any in pairs(context.actions) do
 				action:ReleaseInput(input)
 			end
 		end
