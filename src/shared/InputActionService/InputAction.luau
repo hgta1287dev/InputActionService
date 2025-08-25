@@ -24,6 +24,7 @@ export type InputAction = typeof(setmetatable(
 	{} :: {
 		isEnabled: boolean,
 		isActivated: boolean,
+		activatedAt: number,
 
 		bindings: { [string]: InputBinding },
 		activeBindings: { [string]: boolean },
@@ -61,6 +62,7 @@ function InputAction.new(bindings: { [string]: InputBinding }?): InputAction
 
 	self.isEnabled = false
 	self.isActivated = false
+	self.activatedAt = 0
 
 	self.bindings = bindings or {}
 	self.activeBindings = {}
@@ -327,18 +329,20 @@ function InputAction:_toggleBindingKeyChangedConnection(name: string, active: bo
 end
 
 function InputAction:_updateActivation()
-	local isActivated = self.isEnabled and next(self.activeBindings) ~= nil
+	local shouldActivated = self.isEnabled and next(self.activeBindings) ~= nil
 
-	if isActivated == self.isActivated then
+	if shouldActivated == self.isActivated then
 		return
 	end
 
-	if isActivated and not self.isActivated then
+	if shouldActivated and not self.isActivated then
+		self.startTime = tick()
 		self.isActivated = true
 		self._events.Activated:Fire()
-	elseif not isActivated and self.isActivated then
+	elseif not shouldActivated and self.isActivated then
+		local dt = tick() - self.startTime
 		self.isActivated = false
-		self._events.Deactivated:Fire()
+		self._events.Deactivated:Fire(dt)
 	end
 end
 
