@@ -32,20 +32,21 @@ export type InputAction = typeof(setmetatable(
 		Released: RBXScriptSignal,
 		Activated: RBXScriptSignal,
 		Deactivated: RBXScriptSignal,
-
 		BindingAdded: RBXScriptSignal,
 		BindingRemoved: RBXScriptSignal,
+		BindingKeyChanged: RBXScriptSignal,
 		EnabledChanged: RBXScriptSignal,
 		Destroying: RBXScriptSignal,
 
+		_connections: { [string]: RBXScriptConnection },
 		_events: {
 			Pressed: BindableEvent,
 			Released: BindableEvent,
 			Activated: BindableEvent,
 			Deactivated: BindableEvent,
-
 			BindingAdded: BindableEvent,
 			BindingRemoved: BindableEvent,
+			BindingKeyChanged: BindableEvent,
 			EnabledChanged: BindableEvent,
 			Destroying: BindableEvent,
 		},
@@ -64,14 +65,15 @@ function InputAction.new(bindings: { [string]: InputBinding }?): InputAction
 	self.bindings = bindings or {}
 	self.activeBindings = {}
 
+	self._connections = {}
 	self._events = {
 		Pressed = Instance.new("BindableEvent"),
 		Released = Instance.new("BindableEvent"),
 		Activated = Instance.new("BindableEvent"),
 		Deactivated = Instance.new("BindableEvent"),
-
 		BindingAdded = Instance.new("BindableEvent"),
 		BindingRemoved = Instance.new("BindableEvent"),
+		BindingKeyChanged = Instance.new("BindableEvent"),
 		EnabledChanged = Instance.new("BindableEvent"),
 		Destroying = Instance.new("BindableEvent"),
 	}
@@ -142,8 +144,9 @@ function InputAction:AddBinding(name: string, bindingType: InputBindingType, bin
 	end
 
 	local binding = InputBinding.new(bindingType, bindingKey)
-
 	self.bindings[name] = binding
+
+	self:_toggleBindingKeyChangedConnection(name, true)
 	self._events.BindingAdded:Fire(name, binding)
 
 	return binding
@@ -179,8 +182,12 @@ function InputAction:RemoveBinding(name: string, destroy: boolean?)
 		self:Release(name)
 	end
 
+	self:_toggleBindingKeyChangedConnection(name, false)
+
 	if destroy ~= false then
-		binding:Destroy()
+		pcall(function()
+			binding:Destroy()
+		end)
 	end
 
 	self.bindings[name] = nil
@@ -306,6 +313,19 @@ function InputAction:ReleaseAll()
 end
 
 --[[ Private Methods ]]
+function InputAction:_toggleBindingKeyChangedConnection(name: string, active: boolean)
+	if active then
+		self._connections[name] = (self.bindings[name] :: InputBinding).KeyChanged:Connect(function(...)
+			self._events.BindingKeyChanged:Fire(name, ...)
+		end)
+	else
+		if self._connections[name] then
+			self._connections[name]:Disconnect()
+			self._connections[name] = nil
+		end
+	end
+end
+
 function InputAction:_updateActivation()
 	local isActivated = self.isEnabled and next(self.activeBindings) ~= nil
 

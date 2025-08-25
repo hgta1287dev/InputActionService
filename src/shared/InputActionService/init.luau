@@ -28,11 +28,14 @@ export type InputAction = InputActionModule.InputAction
 export type InputContext = InputContextModule.InputContext
 export type InputBinding = InputBindingModule.InputBinding
 
+type InputBindingType = InputBindingModule.InputBindingType
+type InputBindingKey = InputBindingModule.InputBindingKey
+
 export type InputActionService = typeof(setmetatable(
 	{} :: {
 		contexts: { [string]: InputContext },
 		stackContexts: { string },
-		buttons: { [string]: GuiButton },
+		buttons: { GuiButton },
 
 		isEnabled: boolean,
 
@@ -42,6 +45,7 @@ export type InputActionService = typeof(setmetatable(
 		ContextRemoved: RBXScriptSignal,
 
 		_connections: { [string]: RBXScriptConnection },
+		_permanentConnections: { [string]: RBXScriptConnection },
 		_events: {
 			Destroying: BindableEvent,
 			EnabledChanged: BindableEvent,
@@ -63,6 +67,7 @@ function InputActionService.new(): InputActionService
 
 	self.isEnabled = false
 
+	self._permanentConnections = {}
 	self._connections = {}
 	self._events = {
 		EnabledChanged = Instance.new("BindableEvent"),
@@ -111,6 +116,10 @@ function InputActionService:Destroy()
 	self._events.Destroying:Fire()
 	self:Disable()
 
+	for _, conn in pairs(self._permanentConnections) do
+		conn:Disconnect()
+	end
+
 	for _, event in pairs(self._events) do
 		event:Destroy()
 	end
@@ -132,7 +141,7 @@ function InputActionService:AddContext(name: string, priority: number?): InputCo
 	table.insert(self.stackContexts, name)
 
 	self:_updateStackContexts()
-	self._events.ContextAdded:Fire(context)
+	self._events.ContextAdded:Fire(name, context)
 
 	return context
 end
@@ -148,8 +157,10 @@ function InputActionService:AddContexts(configs: {
 end
 
 function InputActionService:RemoveContext(name: string)
-	if not self.contexts[name] then
+	local context = self.contexts[name]
+	if not context then
 		warn(string.format(ERRORS.CONTEXT_MISSING, name))
+		return
 	end
 
 	self.contexts[name] = nil
@@ -160,7 +171,7 @@ function InputActionService:RemoveContext(name: string)
 	end
 
 	self:_updateStackContexts()
-	self._events.ContextRemoved:Fire(name)
+	self._events.ContextRemoved:Fire(name, context)
 end
 
 function InputActionService:RemoveContexts(names: { string })
@@ -218,6 +229,27 @@ function InputActionService:GetStack(): { string }
 	return self.stackContexts
 end
 
+--//Input Button Management
+function InputActionService:RegisterButton(button: GuiButton)
+	if table.find(self.buttons, button) then
+		return
+	end
+	table.insert(self.buttons, button)
+	if self.isEnabled then
+		self:_setupButtonConnection(button)
+	end
+end
+
+function InputActionService:UnregisterButton(button: GuiButton)
+	local index = table.find(self.buttons, button)
+	if not index then
+		return
+	end
+
+	self:_cleanupButtonConnection(button)
+	table.remove(self.buttons, index)
+end
+
 --[[ Private Methods ]]
 function InputActionService:_updateStackContexts()
 	if #self.stackContexts == 0 then
@@ -263,6 +295,23 @@ function InputActionService:_setup()
 
 	for _, button in pairs(self.buttons) do
 		self:_setupButtonConnection(button :: GuiButton)
+	end
+end
+
+function InputActionService:_cleanupButtonConnection(button: GuiButton)
+	if self._connections[button.Name .. BUTTON_EVENTSTATE.DOWN] then
+		self._connections[button.Name .. BUTTON_EVENTSTATE.DOWN]:Disconnect()
+		self._connections[button.Name .. BUTTON_EVENTSTATE.DOWN] = nil
+	end
+
+	if self._connections[button.Name .. BUTTON_EVENTSTATE.UP] then
+		self._connections[button.Name .. BUTTON_EVENTSTATE.UP]:Disconnect()
+		self._connections[button.Name .. BUTTON_EVENTSTATE.UP] = nil
+	end
+
+	if self._connections[button.Name .. BUTTON_EVENTSTATE.LEAVE] then
+		self._connections[button.Name .. BUTTON_EVENTSTATE.LEAVE]:Disconnect()
+		self._connections[button.Name .. BUTTON_EVENTSTATE.LEAVE] = nil
 	end
 end
 

@@ -130,7 +130,7 @@ function InputBinding:ChangeKey(newType: InputBindingType, newKey: InputBindingK
 
 	self.type = newType
 	self.key = newKey
-	self._events.KeyChanged:Fire(newKey)
+	self._events.KeyChanged:Fire(newType, newKey)
 end
 
 function InputBinding:IsMatchingButton(button: GuiButton): boolean
