@@ -19,40 +19,44 @@ export type BindingFromTypeConfig = {
 	bindingType: InputBindingType,
 	bindingKey: InputBindingKey,
 }
-export type InputAction = {
-	isEnabled: boolean,
-	isActivated: boolean,
 
-	bindings: { [string]: InputBinding },
-	activeBindings: { [string]: boolean },
+export type InputAction = typeof(setmetatable(
+	{} :: {
+		isEnabled: boolean,
+		isActivated: boolean,
 
-	Pressed: RBXScriptSignal,
-	Released: RBXScriptSignal,
-	Activated: RBXScriptSignal,
-	Deactivated: RBXScriptSignal,
+		bindings: { [string]: InputBinding },
+		activeBindings: { [string]: boolean },
 
-	BindingAdded: RBXScriptSignal,
-	BindingRemoved: RBXScriptSignal,
-	EnabledChanged: RBXScriptSignal,
-	Destroying: RBXScriptSignal,
+		Pressed: RBXScriptSignal,
+		Released: RBXScriptSignal,
+		Activated: RBXScriptSignal,
+		Deactivated: RBXScriptSignal,
 
-	_events: {
-		Pressed: BindableEvent,
-		Released: BindableEvent,
-		Activated: BindableEvent,
-		Deactivated: BindableEvent,
+		BindingAdded: RBXScriptSignal,
+		BindingRemoved: RBXScriptSignal,
+		EnabledChanged: RBXScriptSignal,
+		Destroying: RBXScriptSignal,
 
-		BindingAdded: BindableEvent,
-		BindingRemoved: BindableEvent,
-		EnabledChanged: BindableEvent,
-		Destroying: BindableEvent,
+		_events: {
+			Pressed: BindableEvent,
+			Released: BindableEvent,
+			Activated: BindableEvent,
+			Deactivated: BindableEvent,
+
+			BindingAdded: BindableEvent,
+			BindingRemoved: BindableEvent,
+			EnabledChanged: BindableEvent,
+			Destroying: BindableEvent,
+		},
 	},
-} & typeof(setmetatable({} :: InputAction, InputAction))
+	InputAction
+))
 
 --[[ Public API ]]
 --// Basic constructor
-function InputAction.new(bindings: { string: InputBinding }?): InputAction
-	local self = setmetatable({} :: InputAction, InputAction)
+function InputAction.new(bindings: { [string]: InputBinding }?): InputAction
+	local self = setmetatable({}, InputAction) :: InputAction
 
 	self.isEnabled = false
 	self.isActivated = false

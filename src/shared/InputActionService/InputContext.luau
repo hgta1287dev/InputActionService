@@ -21,34 +21,37 @@ export type InputBindingConfig = {
 	bindingType: InputBindingType,
 	bindingKey: InputBindingKey,
 }
-export type InputContext = {
-	priority: number,
-	actions: { [string]: InputAction },
+export type InputContext = typeof(setmetatable(
+	{} :: {
+		priority: number,
+		actions: { [string]: InputAction },
 
-	isEnabled: boolean,
+		isEnabled: boolean,
 
-	Destroying: RBXScriptSignal,
-	ActionAdded: RBXScriptSignal,
-	ActionRemoved: RBXScriptSignal,
-	EnabledChanged: RBXScriptSignal,
-	PriorityChanged: RBXScriptSignal,
+		Destroying: RBXScriptSignal,
+		ActionAdded: RBXScriptSignal,
+		ActionRemoved: RBXScriptSignal,
+		EnabledChanged: RBXScriptSignal,
+		PriorityChanged: RBXScriptSignal,
 
-	_connections: { [string]: RBXScriptConnection },
-	_events: {
-		Destroying: BindableEvent,
-		ActionAdded: BindableEvent,
-		ActionRemoved: BindableEvent,
-		EnabledChanged: BindableEvent,
-		PriorityChanged: BindableEvent,
+		_connections: { [string]: RBXScriptConnection },
+		_events: {
+			Destroying: BindableEvent,
+			ActionAdded: BindableEvent,
+			ActionRemoved: BindableEvent,
+			EnabledChanged: BindableEvent,
+			PriorityChanged: BindableEvent,
+		},
 	},
-} & typeof(setmetatable({} :: InputContext, InputContext))
+	InputContext
+))
 
 --[[ Public API ]]
 --// Basic constructor
-function InputContext.new(priority: number?, actions: { string: InputAction }?): InputContext
-	local self = setmetatable({} :: InputContext, InputContext)
+function InputContext.new(priority: number?, actions: { [string]: InputAction }?): InputContext
+	local self = setmetatable({}, InputContext) :: InputContext
 
-	self.priority = priority or 1
+	self.priority = priority or 0
 	self.isEnabled = false
 
 	self.actions = actions or {}
@@ -109,7 +112,7 @@ function InputContext:Destroy(destroyActions: boolean?)
 	end
 
 	if destroyActions ~= false then
-		for _, action: InputAction in pairs(self.actions) do
+		for _, action in pairs(self.actions) do
 			action:Destroy()
 		end
 	end
@@ -157,9 +160,11 @@ function InputContext:AddAction(name: string, bindingConfigs: { [string]: InputB
 	return action
 end
 
-function InputContext:AddActions(actionConfigs: { [string]: {
-	[string]: InputBindingConfig,
-} }): { [string]: InputAction }
+function InputContext:AddActions(actionConfigs: {
+	[string]: {
+		[string]: InputBindingConfig,
+	},
+}): { [string]: InputAction }
 	local results: { [string]: InputAction } = {}
 	for name, actionConfig in pairs(actionConfigs) do
 		results[name] = self:AddAction(name, actionConfig)

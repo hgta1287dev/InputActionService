@@ -10,22 +10,25 @@ local ERRORS = {
 --[[ Types ]]
 export type InputBindingType = "Keyboard" | "Mouse" | "Gamepad" | "Button"
 export type InputBindingKey = Enum.KeyCode | Enum.UserInputType | GuiButton
-export type InputBinding = {
-	type: InputBindingType,
-	key: InputBindingKey,
+export type InputBinding = typeof(setmetatable(
+	{} :: {
+		type: InputBindingType,
+		key: InputBindingKey,
 
-	isEnabled: boolean,
+		isEnabled: boolean,
 
-	KeyChanged: RBXScriptSignal,
-	Destroying: RBXScriptSignal,
-	EnabledChanged: RBXScriptSignal,
+		KeyChanged: RBXScriptSignal,
+		Destroying: RBXScriptSignal,
+		EnabledChanged: RBXScriptSignal,
 
-	_events: {
-		KeyChanged: BindableEvent,
-		Destroying: BindableEvent,
-		EnabledChanged: BindableEvent,
+		_events: {
+			KeyChanged: BindableEvent,
+			Destroying: BindableEvent,
+			EnabledChanged: BindableEvent,
+		},
 	},
-} & typeof(setmetatable({} :: InputBinding, InputBinding))
+	InputBinding
+))
 
 --[[ Helpers ]]
 local function isValidKey(bindingType: InputBindingType, bindingKey: InputBindingKey): boolean
@@ -57,11 +60,10 @@ function InputBinding.new(bindingType: InputBindingType, bindingKey: InputBindin
 		error(string.format(ERRORS.INVALID_KEY, bindingType, tostring(bindingKey)))
 	end
 
-	local self = setmetatable({} :: InputBinding, InputBinding)
+	local self = setmetatable({}, InputBinding) :: InputBinding
+	self.isEnabled = false
 	self.type = bindingType
 	self.key = bindingKey
-
-	self.isEnabled = false
 
 	self._events = {
 		KeyChanged = Instance.new("BindableEvent"),

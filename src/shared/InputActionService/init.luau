@@ -19,48 +19,43 @@ local ERRORS = {
 local UIS = game:GetService("UserInputService")
 
 --[[ Modules ]]
-local InputAction = require(script.InputAction)
-local InputContext = require(script.InputContext)
-local InputBinding = require(script.InputBinding)
+local InputActionModule = require(script.InputAction)
+local InputContextModule = require(script.InputContext)
+local InputBindingModule = require(script.InputBinding)
 
 --[[ Types ]]
-export type InputAction = InputAction.InputAction
-export type InputContext = InputContext.InputContext
-export type InputBinding = InputBinding.InputBinding
+export type InputAction = InputActionModule.InputAction
+export type InputContext = InputContextModule.InputContext
+export type InputBinding = InputBindingModule.InputBinding
 
-export type InputActionService = {
-	contexts: { [string]: InputContext },
-	stackContexts: { string },
-	buttons: { [string]: GuiButton },
+export type InputActionService = typeof(setmetatable(
+	{} :: {
+		contexts: { [string]: InputContext },
+		stackContexts: { string },
+		buttons: { [string]: GuiButton },
 
-	isEnabled: boolean,
+		isEnabled: boolean,
 
-	Destroying: RBXScriptSignal,
-	EnabledChanged: RBXScriptSignal,
+		Destroying: RBXScriptSignal,
+		EnabledChanged: RBXScriptSignal,
+		ContextAdded: RBXScriptSignal,
+		ContextRemoved: RBXScriptSignal,
 
-	ActionAdded: RBXScriptSignal,
-	ActionRemoved: RBXScriptSignal,
-
-	ContextAdded: RBXScriptSignal,
-	ContextRemoved: RBXScriptSignal,
-
-	_connections: { [string]: RBXScriptConnection },
-	_events: {
-		Destroying: BindableEvent,
-		EnabledChanged: BindableEvent,
-
-		ActionAdded: BindableEvent,
-		ActionRemoved: BindableEvent,
-
-		ContextAdded: BindableEvent,
-		ContextRemoved: BindableEvent,
+		_connections: { [string]: RBXScriptConnection },
+		_events: {
+			Destroying: BindableEvent,
+			EnabledChanged: BindableEvent,
+			ContextAdded: BindableEvent,
+			ContextRemoved: BindableEvent,
+		},
 	},
-} & typeof(setmetatable({} :: InputActionService, InputActionService))
+	InputActionService
+))
 
 --[[ Public API ]]
 --//Basic constructor
 function InputActionService.new(): InputActionService
-	local self = setmetatable({} :: InputActionService, InputActionService)
+	local self: InputActionService = setmetatable({}, InputActionService) :: InputActionService
 
 	self.contexts = {}
 	self.stackContexts = {}
@@ -72,8 +67,6 @@ function InputActionService.new(): InputActionService
 	self._events = {
 		EnabledChanged = Instance.new("BindableEvent"),
 		Destroying = Instance.new("BindableEvent"),
-		ActionAdded = Instance.new("BindableEvent"),
-		ActionRemoved = Instance.new("BindableEvent"),
 		ContextAdded = Instance.new("BindableEvent"),
 		ContextRemoved = Instance.new("BindableEvent"),
 	}
@@ -94,6 +87,7 @@ function InputActionService:Enable()
 	end
 
 	self.isEnabled = true
+
 	self:_setup()
 	self._events.EnabledChanged:Fire(self.isEnabled)
 end
@@ -126,27 +120,29 @@ function InputActionService:Destroy()
 end
 
 --[[ Context Management ]]
-function InputActionService:AddContext(name: string): InputContext
+function InputActionService:AddContext(name: string, priority: number?): InputContext
 	if self.contexts[name] then
 		warn(string.format(ERRORS.CONTEXT_EXISTS, name))
-		return self.contexts[name]
+		return self.contexts[name] :: InputContext
 	end
 
-	local context = InputContext.new()
+	local context: InputContext = InputContextModule.new(priority)
 	self.contexts[name] = context
 
 	table.insert(self.stackContexts, name)
-	self:_updateStackContexts()
 
+	self:_updateStackContexts()
 	self._events.ContextAdded:Fire(context)
 
 	return context
 end
 
-function InputActionService:AddContexts(contextNames: { string }): { [string]: InputContext }
+function InputActionService:AddContexts(configs: {
+	[string]: { priority: number? },
+}): { [string]: InputContext }
 	local result: { [string]: InputContext } = {}
-	for _, name in pairs(contextNames) do
-		result[name] = self:AddContext(name)
+	for name, config in pairs(configs) do
+		result[name] = self:AddContext(name, config.priority)
 	end
 	return result
 end
@@ -162,8 +158,8 @@ function InputActionService:RemoveContext(name: string)
 	if index then
 		table.remove(self.stackContexts, index)
 	end
-	self:_updateStackContexts()
 
+	self:_updateStackContexts()
 	self._events.ContextRemoved:Fire(name)
 end
 
@@ -182,7 +178,6 @@ function InputActionService:RequireContext(name: string): InputContext
 	if not context then
 		error(string.format(ERRORS.CONTEXT_MISSING, name), 2)
 	end
-
 	return context
 end
 
@@ -215,7 +210,7 @@ function InputActionService:PopContext(name: string)
 end
 
 function InputActionService:ClearStack()
-	self.stackContexts = {}
+	table.clear(self.stackContexts)
 	self:_updateStackContexts()
 end
 
@@ -230,14 +225,14 @@ function InputActionService:_updateStackContexts()
 	end
 
 	table.sort(self.stackContexts, function(a, b)
-		local contextA = self.contexts[a] :: InputContext
-		local contextB = self.contexts[b] :: InputContext
+		local contextA = self.contexts[a] :: InputContext?
+		local contextB = self.contexts[b] :: InputContext?
 
 		if not contextA or not contextB then
 			return false
 		end
 
-		return (contextA.priority :: number) < (contextB.priority :: number)
+		return contextA.priority < contextB.priority
 	end)
 end
 
@@ -255,6 +250,7 @@ function InputActionService:_cleanup()
 	for _, connection in pairs(self._connections) do
 		connection:Disconnect()
 	end
+
 	self._connections = {}
 
 	for _, context in pairs(self.contexts) do
@@ -359,4 +355,4 @@ function InputActionService:_setupUISConnections()
 	end)
 end
 
-return InputActionService.new()
+return InputActionService
