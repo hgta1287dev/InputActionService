@@ -270,7 +270,7 @@ function InputAction:Press(name: string)
 	end
 
 	self.activeBindings[name] = true
-	self._events.Pressed:Fire(name, binding)
+	self._events.Pressed:Fire(name, binding.type, binding.key)
 	self:_updateActivation()
 end
 
@@ -290,7 +290,7 @@ function InputAction:Release(name: string)
 	end
 
 	self.activeBindings[name] = nil
-	self._events.Released:Fire(name, binding)
+	self._events.Released:Fire(name, binding.type, binding.key)
 	self:_updateActivation()
 end
 
