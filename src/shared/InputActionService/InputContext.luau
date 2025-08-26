@@ -23,12 +23,14 @@ export type InputBindingConfig = {
 }
 export type InputContext = typeof(setmetatable(
 	{} :: {
+		sink: boolean,
 		priority: number,
 		actions: { [string]: InputAction },
 
 		isEnabled: boolean,
 
 		Destroying: RBXScriptSignal,
+		SinkChanged: RBXScriptSignal,
 		ActionAdded: RBXScriptSignal,
 		ActionRemoved: RBXScriptSignal,
 		EnabledChanged: RBXScriptSignal,
@@ -37,6 +39,7 @@ export type InputContext = typeof(setmetatable(
 		_connections: { [string]: RBXScriptConnection },
 		_events: {
 			Destroying: BindableEvent,
+			SinkChanged: BindableEvent,
 			ActionAdded: BindableEvent,
 			ActionRemoved: BindableEvent,
 			EnabledChanged: BindableEvent,
@@ -46,19 +49,29 @@ export type InputContext = typeof(setmetatable(
 	InputContext
 ))
 
+export type InputContextConfig = {
+	sink: boolean?,
+	priority: number?,
+	actions: { [string]: InputAction }?,
+}
+
 --[[ Public API ]]
 --// Basic constructor
-function InputContext.new(priority: number?, actions: { [string]: InputAction }?): InputContext
+function InputContext.new(config: InputContextConfig?): InputContext
+	local _config = config or {} :: InputContextConfig
+
 	local self = setmetatable({}, InputContext) :: InputContext
 
-	self.priority = priority or 0
 	self.isEnabled = false
 
-	self.actions = actions or {}
+	self.sink = _config.sink or false
+	self.priority = _config.priority or 0
+	self.actions = _config.actions or {}
 
 	self._connections = {}
 	self._events = {
 		Destroying = Instance.new("BindableEvent"),
+		SinkChanged = Instance.new("BindableEvent"),
 		ActionAdded = Instance.new("BindableEvent"),
 		ActionRemoved = Instance.new("BindableEvent"),
 		EnabledChanged = Instance.new("BindableEvent"),
@@ -134,7 +147,16 @@ function InputContext:ReleaseAll()
 	end
 end
 
---// Priority management
+--// Properties management
+function InputContext:SetSink(sink: boolean)
+	if self.sink == sink then
+		return
+	end
+
+	self.sink = sink
+	self._events.SinkChanged:Fire(sink)
+end
+
 function InputContext:SetPriority(priority: number)
 	if self.priority == priority then
 		return

@@ -30,6 +30,7 @@ export type InputBinding = InputBindingModule.InputBinding
 
 type InputBindingType = InputBindingModule.InputBindingType
 type InputBindingKey = InputBindingModule.InputBindingKey
+type InputContextConfig = InputContextModule.InputContextConfig
 
 export type InputActionService = typeof(setmetatable(
 	{} :: {
@@ -129,18 +130,15 @@ function InputActionService:Destroy()
 end
 
 --[[ Context Management ]]
-function InputActionService:AddContext(name: string, priority: number?): InputContext
+function InputActionService:AddContext(name: string, config: InputContextConfig?): InputContext
 	if self.contexts[name] then
 		warn(string.format(ERRORS.CONTEXT_EXISTS, name))
 		return self.contexts[name] :: InputContext
 	end
 
-	local context: InputContext = InputContextModule.new(priority)
+	local context: InputContext = InputContextModule.new(config)
 	self.contexts[name] = context
 
-	table.insert(self.stackContexts, name)
-
-	self:_updateStackContexts()
 	self._events.ContextAdded:Fire(name, context)
 
 	return context
@@ -170,7 +168,6 @@ function InputActionService:RemoveContext(name: string)
 		table.remove(self.stackContexts, index)
 	end
 
-	self:_updateStackContexts()
 	self._events.ContextRemoved:Fire(name, context)
 end
 
@@ -198,31 +195,16 @@ function InputActionService:PushContext(name: string)
 		warn(string.format(ERRORS.CONTEXT_MISSING, name))
 	end
 
-	if table.find(self.stackContexts, name) then
-		return
+	local index = table.find(self.stackContexts, name)
+	if index then
+		table.remove(self.stackContexts, index)
 	end
 
 	table.insert(self.stackContexts, name)
-	self:_updateStackContexts()
 end
 
-function InputActionService:PopContext(name: string)
-	if not self.contexts[name] then
-		warn(string.format(ERRORS.CONTEXT_MISSING, name))
-	end
-
-	local index = table.find(self.stackContexts, name)
-	if not index then
-		return
-	end
-
-	table.remove(self.stackContexts, index)
-	self:_updateStackContexts()
-end
-
-function InputActionService:ClearStack()
-	table.clear(self.stackContexts)
-	self:_updateStackContexts()
+function InputActionService:PopContext()
+	table.remove(self.stackContexts)
 end
 
 function InputActionService:GetStack(): { string }
@@ -251,12 +233,9 @@ function InputActionService:UnregisterButton(button: GuiButton)
 end
 
 --[[ Private Methods ]]
-function InputActionService:_updateStackContexts()
-	if #self.stackContexts == 0 then
-		return
-	end
-
-	table.sort(self.stackContexts, function(a, b)
+function InputActionService:_getContextsByPriority(): { string }
+	local sortedStack = table.clone(self.stackContexts)
+	table.sort(sortedStack, function(a, b)
 		local contextA = self.contexts[a] :: InputContext?
 		local contextB = self.contexts[b] :: InputContext?
 
@@ -264,8 +243,9 @@ function InputActionService:_updateStackContexts()
 			return false
 		end
 
-		return contextA.priority < contextB.priority
+		return contextA.priority > contextB.priority
 	end)
+	return sortedStack
 end
 
 function InputActionService:_cleanupUISConnections()
@@ -321,13 +301,20 @@ function InputActionService:_setupButtonConnection(button: GuiButton)
 	end
 
 	self._connections[button.Name .. BUTTON_EVENTSTATE.DOWN] = button.MouseButton1Down:Connect(function()
-		for _, contextName in pairs(self.stackContexts) do
+		for _, contextName in ipairs(self:_getContextsByPriority()) do
 			local context = self.contexts[contextName]
 			if not context.isEnabled then
 				continue
 			end
+			local shouldSink
 			for _, action: any in pairs(context.actions) do
+				if action:IsMatchingButton(button) and context.sink then
+					shouldSink = true
+				end
 				action:PressButton(button)
+			end
+			if shouldSink then
+				return
 			end
 		end
 	end)
@@ -373,14 +360,14 @@ function InputActionService:_setupUISConnections()
 				continue
 			end
 
-			local activated = false
+			local shouldSink = false
 			for _, action: any in pairs(context.actions) do
-				if not activated and action:IsMatchingInput(input) then
-					activated = true
+				if action:IsMatchingInput(input) and context.sink then
+					shouldSink = true
 				end
 				action:PressInput(input)
 			end
-			if activated then
+			if shouldSink then
 				return
 			end
 		end
