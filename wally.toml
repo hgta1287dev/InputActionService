@@ -1,12 +1,9 @@
 [package]
-name = "asus/test2"
-version = "0.1.0"
-registry = "https://github.com/UpliftGames/wally-index"
+name = "hgta1287dev/input-action-service"
+description = "Simple InputActionService"
+version = "1.0.0"
+license = "MIT"
+authors = ["hí <hoang1287dev@gmail.com>"]
 realm = "shared"
 
 [dependencies]
-Promise = "evaera/promise@4.0.0"
-Networker = "leifstout/networker@0.3.0"
-
-[server-dependencies]
-ProfileService = "firebird702/profileservice@1.1.0"

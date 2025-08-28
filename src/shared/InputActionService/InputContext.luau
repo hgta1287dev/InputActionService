@@ -167,14 +167,16 @@ function InputContext:SetPriority(priority: number)
 end
 
 --// Action management
-function InputContext:AddAction(name: string, bindingConfigs: { [string]: InputBindingConfig }): InputAction
+function InputContext:AddAction(name: string, actionConfig: { [string]: InputBindingConfig }?): InputAction
 	if self.actions[name] then
 		warn(string.format(ERRORS.ACTION_EXISTS, name))
 		return self.actions[name]
 	end
 
 	local action = InputAction.new()
-	action:AddBindings(bindingConfigs)
+	if actionConfig then
+		action:AddBindings(actionConfig)
+	end
 
 	self.actions[name] = action
 	self._events.ActionAdded:Fire(name, action)
